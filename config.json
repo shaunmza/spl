@@ -1,0 +1,7 @@
+{
+  "WitnessUrl": "wss://steemd.steemit.com",
+  "AccountName": "spl",
+  "PrivateKey": "5...",
+  "Currency": "SBD",
+  "Port": "8877"
+}
