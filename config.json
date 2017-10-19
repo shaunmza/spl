@@ -3,5 +3,7 @@
   "AccountName": "spl",
   "PrivateKey": "5...",
   "Currency": "SBD",
-  "Port": "8877"
+  "Port": "8877",
+  "MinimumReputation": 30,
+  "LogFile": "/absolute/path/to/file.log"
 }
