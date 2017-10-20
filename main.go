@@ -496,7 +496,7 @@ func (t *transfer) UnmarshalJSON(data []byte) (err error) {
 
 	t.To = raw.Player
 	t.Memo = raw.Memo
-	t.Amount = strconv.FormatFloat(raw.Amount, 'f', 6, 64)
+	t.Amount = fmt.Sprintf("%.3f", raw.Amount)
 
 	return nil
 }
