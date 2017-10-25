@@ -431,7 +431,7 @@ func importJson(jsonFile string) {
 
 		if rpSimple < c.MinimumReputation {
 			st.Status = "Failed"
-			st.Error = fmt.Sprintf("User reputation (%d) below Minimum reputation of %d\n", rpSimple, c.MinimumReputation)
+			st.Error = fmt.Sprintf("User reputation (%d) below Minimum reputation of %d", rpSimple, c.MinimumReputation)
 
 			ln, err := json.Marshal(st)
 			if err != nil {
@@ -510,7 +510,12 @@ func calcReputation(rep string) int {
 	neg := strings.Contains(rep, "-")
 	rep = strings.Replace(rep, "-", "", 1)
 
-	leadingDigits, err := strconv.Atoi(rep[:4])
+	l := 4
+	if len(rep) < 4 {
+		l = len(rep)
+	}
+
+	leadingDigits, err := strconv.Atoi(rep[:l])
 	if err != nil {
 		return 0
 	}
