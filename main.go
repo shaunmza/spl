@@ -66,11 +66,15 @@ type Config struct {
 type transferStatus struct {
 	Account string
 	Status  string
+	BlockId int32
+	TrxNum  int32
+	Expired string
 	Error   string
 }
 
 var client *steemgo.Client
 var c *Config
+var logFileName string
 
 func main() {
 	var err error
@@ -110,6 +114,9 @@ func main() {
 	}
 	fmt.Println("Running...")
 
+	tme := time.Now()
+
+	logFileName = c.LogFile + "_" + tme.Format("2006-01-02")
 	f, err := os.Create(c.LogFile)
 	if err != nil {
 		panic(fmt.Sprintf("Cannot create log file: %s", c.LogFile))
@@ -130,23 +137,23 @@ func main() {
 
 }
 
-func send(tr *transfer, client *steemgo.Client) (res string) {
+func send(tr *transfer, client *steemgo.Client) (res string, blockId int32, trxNum int32, expired bool) {
 	config, err := client.Database.GetConfig()
 	if err != nil {
-		return "Could not connect (configs)"
+		return "Could not connect (configs)", 0, 0, false
 	}
 
 	// Get the props to get the head block number and ID
 	// so that we can use that for the transaction.
 	props, err := client.Database.GetDynamicGlobalProperties()
 	if err != nil {
-		return "Could not connect (properties)"
+		return "Could not connect (properties)", 0, 0, false
 	}
 
 	// Prepare the transaction.
 	refBlockPrefix, err := transactions.RefBlockPrefix(props.HeadBlockID)
 	if err != nil {
-		return "Could not connect (block prefix)"
+		return "Could not connect (block prefix)", 0, 0, false
 	}
 
 	tx := transactions.NewSignedTransaction(&types.Transaction{
@@ -164,24 +171,24 @@ func send(tr *transfer, client *steemgo.Client) (res string) {
 	// Sign.
 	privKey, err := wif.Decode(c.PrivateKey)
 	if err != nil {
-		return "Could not decode the WIF key, please make sure you supplied the correct private key " + err.Error()
+		return "Could not decode the WIF key, please make sure you supplied the correct private key " + err.Error(), 0, 0, false
 	}
 	privKeys := [][]byte{privKey}
 
 	if err := tx.Sign(privKeys, transactions.SteemChain); err != nil {
-		return "Could not sign error is: " + err.Error()
+		return "Could not sign error is: " + err.Error(), 0, 0, false
 	}
 
 	// Broadcast.
-	_, err = client.NetworkBroadcast.BroadcastTransactionSynchronous(tx.Transaction)
+	resp, err := client.NetworkBroadcast.BroadcastTransactionSynchronous(tx.Transaction)
 	if err != nil {
-		return "Could not broadcast error is: " + err.Error()
+		return "Could not broadcast error is: " + err.Error(), 0, 0, false
 	}
 
 	time.Sleep(time.Duration(config.SteemitBlockInterval) * time.Second)
 
 	// Success!
-	return "Sent"
+	return "Sent", resp.BlockNum, resp.TrxNum, resp.Expired
 }
 
 func importCsv(csvFile string) {
@@ -284,16 +291,22 @@ func importCsv(csvFile string) {
 					fmt.Println("Transfer failed: " + err.Error())
 					return
 				}
-				continue
+				// Send them 0.001 SBD and a message instead
+				//continue
+				record[1] = "0.001"
+				record[2] = fmt.Sprintf("Lucksacks.com payout rejected. Reason : Rep level below %d", c.MinimumReputation)
 			}
 
 			tr := &transfer{To: ac[0],
 				Amount: strings.TrimSpace(record[1]) + " " + c.Currency,
 				Memo:   strings.TrimSpace(record[2])}
 
-			r := send(tr, client)
+			r, blockId, trxNum, expired := send(tr, client)
 			if r == "Sent" {
 				st.Status = "Success"
+				st.BlockId = blockId
+				st.TrxNum = trxNum
+				st.Expired = expiredString(expired)
 
 				ln, err := json.Marshal(st)
 				if err != nil {
@@ -310,6 +323,9 @@ func importCsv(csvFile string) {
 			} else {
 				st.Status = "Failed"
 				st.Error = r
+				st.BlockId = blockId
+				st.TrxNum = trxNum
+				st.Expired = expiredString(expired)
 
 				ln, err := json.Marshal(st)
 				if err != nil {
@@ -444,16 +460,22 @@ func importJson(jsonFile string) {
 				fmt.Println("Transfer failed: " + err.Error())
 				return
 			}
-			continue
+			// Send them 0.001 SBD and a message instead
+			//continue
+			record.Amount = "0.001"
+			record.Memo = fmt.Sprintf("Lucksacks.com payout rejected. Reason : Rep level below %d", c.MinimumReputation)
 		}
 
 		tr := &transfer{To: ac[0],
 			Amount: strings.TrimSpace(record.Amount) + " " + c.Currency,
 			Memo:   strings.TrimSpace(record.Memo)}
 
-		r := send(tr, client)
+		r, blockId, trxNum, expired := send(tr, client)
 		if r == "Sent" {
 			st.Status = "Success"
+			st.BlockId = blockId
+			st.TrxNum = trxNum
+			st.Expired = expiredString(expired)
 
 			ln, err := json.Marshal(st)
 			if err != nil {
@@ -470,6 +492,9 @@ func importJson(jsonFile string) {
 		} else {
 			st.Status = "Failed"
 			st.Error = r
+			st.BlockId = blockId
+			st.TrxNum = trxNum
+			st.Expired = expiredString(expired)
 
 			ln, err := json.Marshal(st)
 			if err != nil {
@@ -566,4 +591,11 @@ func logLine(ln string) (err error) {
 
 	f.Sync()
 	return nil
+}
+
+func expiredString(expired bool) string {
+	if expired == true {
+		return "Expired"
+	}
+	return ""
 }
